@@ -1,0 +1,243 @@
+// Banco: PostgreSQL (necessário para hospedar em serviços como a Vercel, que não
+// permitem gravar arquivos persistentes como o SQLite exige).
+// Gratuito: crie um banco em neon.tech e cole a connection string em DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PerfilUsuario {
+  ADMINISTRADOR
+  GERENTE
+  ENCARREGADO
+  OPERADOR
+}
+
+enum StatusEmpresa {
+  ATIVA
+  INATIVA
+}
+
+// Proprietária da plataforma (Sobral System). Não pertence a nenhuma empresa
+// cliente — login separado do restante do sistema.
+model AdministradorMaster {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String   @unique
+  senhaHash String
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  @@map("administradores_master")
+}
+
+// Empresa cliente do SaaS. Todo dado operacional (usuários, produtos,
+// movimentações, apontamentos, auditoria) é vinculado a uma Empresa via
+// empresaId. Nenhuma query de dado operacional pode rodar sem esse filtro.
+model Empresa {
+  id           String        @id @default(cuid())
+  razaoSocial  String
+  nomeFantasia String
+  cnpj         String        @unique
+  email        String?
+  telefone     String?
+  endereco     String?
+  logoUrl      String?
+  status       StatusEmpresa @default(ATIVA)
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  usuarios          Usuario[]
+  pedidos           Pedido[]
+  produtos          Produto[]
+  movimentacoes     Movimentacao[]
+  logsAuditoria     LogAuditoria[]
+  sessoesInventario SessaoInventario[]
+  apontamentos      Apontamento[]
+
+  @@map("empresas")
+}
+
+enum TipoMovimento {
+  AJUSTE_CONTAGEM // +0,5 / -1 etc, feito na Tela de Contagem
+  ENTRADA
+  SAIDA
+  CORRECAO_MANUAL // edição direta de saldo por supervisor/admin
+}
+
+enum StatusApontamento {
+  NOVO
+  EM_ANDAMENTO
+  CONCLUIDO
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  nome         String
+  login        String
+  senhaHash    String
+  perfil       PerfilUsuario @default(OPERADOR)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+
+  movimentacoes    Movimentacao[]
+  logsAuditoria    LogAuditoria[]
+  sessoesInventario SessaoInventario[]
+  apontamentos      Apontamento[]
+
+  @@unique([empresaId, login])
+  @@index([empresaId])
+  @@map("usuarios")
+}
+
+model Pedido {
+  id          String   @id @default(cuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  nome        String
+  descricao   String?
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+
+  produtos    Produto[]
+
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+  @@map("pedidos")
+}
+
+model Produto {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  codigo        String
+  descricao     String
+  unidade       String   // UN, KG, CX, L, etc.
+  saldo         Float    @default(0)
+  contagem      Float?   // preenchido durante a conferência; null = ainda não conferido
+  localizacao   String?
+  categoria     String?
+  observacoes   String?
+  codigoBarras  String?
+  estoqueMinimo Float?   // usado para o indicador "estoque crítico" no dashboard
+  custoUnitario Float?   // custo médio unitário; usado para o KPI "Valor do estoque" (saldo × custoUnitario)
+  conferidoEm   DateTime?
+  pedidoId      String?
+  pedido        Pedido?  @relation(fields: [pedidoId], references: [id])
+  fatorConversao   Float?  // multiplicador aplicado ao saldo para exibir na unidade secundária (ex: m³ por caixa)
+  unidadeConversao String? // rótulo da unidade secundária (ex: "m³")
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  movimentacoes Movimentacao[]
+  logsAuditoria LogAuditoria[]
+
+  @@unique([empresaId, codigo])
+  @@unique([empresaId, codigoBarras])
+  @@index([empresaId])
+  @@index([descricao])
+  @@index([categoria])
+  @@index([pedidoId])
+  @@map("produtos")
+}
+
+// Histórico de movimentações: nunca é apagado (sem cascade de delete, sem update de valores passados).
+model Movimentacao {
+  id            String        @id @default(cuid())
+  empresaId     String
+  empresa       Empresa       @relation(fields: [empresaId], references: [id])
+  produtoId     String
+  produto       Produto       @relation(fields: [produtoId], references: [id])
+  usuarioId     String
+  usuario       Usuario       @relation(fields: [usuarioId], references: [id])
+  tipo          TipoMovimento
+  valor         Float         // o delta aplicado, ex: -0.5, +1
+  saldoAnterior Float
+  saldoNovo     Float
+  ip            String?
+  sessaoInventarioId String?
+  sessaoInventario   SessaoInventario? @relation(fields: [sessaoInventarioId], references: [id])
+  criadoEm      DateTime      @default(now())
+
+  @@index([empresaId])
+  @@index([produtoId])
+  @@index([usuarioId])
+  @@index([criadoEm])
+  @@map("movimentacoes")
+}
+
+// Auditoria genérica: qualquer alteração de cadastro (não movimentação de saldo) passa por aqui.
+model LogAuditoria {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  usuarioId    String
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id])
+  produtoId    String?
+  produto      Produto? @relation(fields: [produtoId], references: [id])
+  acao         String   // ex: "PRODUTO_CRIADO", "PRODUTO_EDITADO", "USUARIO_CRIADO"
+  campoAlterado String?
+  valorAntigo  String?
+  valorNovo    String?
+  criadoEm     DateTime @default(now())
+
+  @@index([empresaId])
+  @@index([produtoId])
+  @@index([criadoEm])
+  @@map("logs_auditoria")
+}
+
+// Modo Inventário: agrupa as movimentações de uma sessão de conferência para gerar
+// o relatório de fechamento (itens conferidos, divergências, tempo gasto).
+model SessaoInventario {
+  id             String    @id @default(cuid())
+  empresaId      String
+  empresa        Empresa   @relation(fields: [empresaId], references: [id])
+  usuarioId      String
+  usuario        Usuario   @relation(fields: [usuarioId], references: [id])
+  iniciadaEm     DateTime  @default(now())
+  finalizadaEm   DateTime?
+  observacoes    String?
+
+  movimentacoes  Movimentacao[]
+
+  @@index([empresaId])
+  @@map("sessoes_inventario")
+}
+
+// Fila de Apontamentos de Produção: o operador escaneia a OF pelo celular
+// (Produção → Apontamento) e o registro cai automaticamente na fila exibida
+// no PC (tela "Fila de Apontamentos"), onde é copiado para o sistema oficial
+// e marcado como concluído. Nada aqui mexe nos modelos de estoque acima.
+model Apontamento {
+  id             String            @id @default(cuid())
+  empresaId      String
+  empresa        Empresa           @relation(fields: [empresaId], references: [id])
+  numeroOF       String
+  numeroOperacao String
+  peca           String
+  quantidade     Float
+  situacao       String            // ex: "OK", "FALTA", "PROBLEMA", "OUTRO"
+  motivo         String?           // preenchido quando houver falta/problema
+  observacao     String?
+  status         StatusApontamento @default(NOVO)
+  usuarioId      String
+  usuario        Usuario           @relation(fields: [usuarioId], references: [id])
+  concluidoEm    DateTime?
+  criadoEm       DateTime          @default(now())
+  atualizadoEm   DateTime          @updatedAt
+
+  @@index([empresaId])
+  @@index([status])
+  @@index([numeroOF])
+  @@index([criadoEm])
+  @@index([atualizadoEm])
+  @@map("apontamentos")
+}

@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scrollbar-color: #B8BFB9 transparent;
+  scrollbar-width: thin;
+}
+
+body {
+  @apply bg-base-50 text-base-950 antialiased;
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(242,162,12,0.05), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(53,86,111,0.05), transparent 40%);
+  background-attachment: fixed;
+}
+
+/* O rosto tipográfico de destaque (títulos, valores-chave) usa a face
+   Space Grotesk em vez da Inter — é a assinatura tipográfica do sistema. */
+.text-display,
+.text-key,
+h1 {
+  @apply font-display;
+}
+
+/* Foco visível sempre — obrigatório em ambiente de touchscreen com teclado físico eventual */
+:focus-visible {
+  outline: 2px solid #F2A20C;
+  outline-offset: 2px;
+}
+
+/* Números tabulares em todo o sistema: colunas de saldo/contagem alinham perfeitamente */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar refinada (webkit) para o padrão de software corporativo */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #B8BFB9;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #96A099;
+}
+
+/* Seleção de texto com a cor de marca */
+::selection {
+  background-color: rgba(242, 162, 12, 0.35);
+  color: #191D1B;
+}
+
+/* Efeito "shimmer" usado nos estados de carregamento (skeleton) */
+.skeleton {
+  background: linear-gradient(90deg, #E3E6E4 0%, #EEF0EF 50%, #E3E6E4 100%);
+  background-size: 800px 100%;
+  @apply animate-shimmer rounded-md;
+}
+
+/* Corrige o autofill do navegador (Safari/Chrome) nos campos de usuário e senha:
+   sem isso, o navegador pode aplicar uma cor de fundo própria (branco/amarelo)
+   diferente do fundo do card, criando uma "mancha" no campo preenchido. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #191D1B;
+  caret-color: #191D1B;
+  box-shadow: 0 0 0 1000px #FFFFFF inset;
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Remove a aparência nativa que o Safari/iOS aplica em inputs de texto e senha. */
+input[type='text'],
+input[type='password'],
+input[type='email'],
+input[type='search'],
+input[type='number'] {
+  -webkit-appearance: none;
+  appearance: none;
+  caret-color: #F2A20C;
+  /* Sem isso, o Chrome/Edge desenha o próprio anel de foco padrão por cima
+     da borda azul que os componentes já desenham (focus-within:border-action),
+     criando uma borda dupla/deslocada ao focar o campo. */
+  outline: none;
+}
+
+/* Utilitário para entrada suave de páginas/painéis */
+.animate-in {
+  @apply animate-fade-in;
+}
+
+/* Etiqueta de prateleira: forma com entalhe no canto, usada em badges e
+   marcadores de localização/código — a assinatura visual do sistema. */
+.bin-tag {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
